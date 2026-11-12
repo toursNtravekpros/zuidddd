@@ -1,0 +1,68 @@
+name: Process PDFs
+
+on:
+  workflow_dispatch:
+
+jobs:
+  process-pdfs:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install pdf-lib
+        run: npm install pdf-lib
+
+      - name: Create PDF processor
+        run: |
+          cat > process-pdfs.js <<'EOF'
+          const fs = require('fs');
+          const path = require('path');
+          const { PDFDocument } = require('pdf-lib');
+
+          async function main() {
+            const files = fs.readdirSync('.')
+              .filter(file => file.toLowerCase().endsWith('.pdf'));
+
+            console.log(`Found ${files.length} PDF files`);
+
+            fs.mkdirSync('processed', { recursive: true });
+
+            for (const file of files) {
+              console.log(`Processing: ${file}`);
+
+              const input = fs.readFileSync(file);
+              const pdf = await PDFDocument.load(input);
+
+              pdf.setProducer('pdf-lib');
+              pdf.setCreator('pdf-lib');
+
+              const output = await pdf.save();
+
+              fs.writeFileSync(
+                path.join('processed', file),
+                output
+              );
+            }
+          }
+
+          main().catch(error => {
+            console.error(error);
+            process.exit(1);
+          });
+          EOF
+
+      - name: Process PDFs
+        run: node process-pdfs.js
+
+      - name: Upload processed PDFs
+        uses: actions/upload-artifact@v4
+        with:
+          name: processed-pdfs
+          path: processed/
